@@ -5,7 +5,7 @@ module.exports = function getConfig() {
 
         return {
                 http: {
-                        port: env['PORT'] || 3001,
+                        port: env.PORT || 3001,
                 },
         };
 };
