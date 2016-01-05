@@ -1,23 +1,23 @@
 'use strict';
 
 module.exports = class BaseStorage {
-        constructor () {
+  constructor () {
 
-        }
+  }
 
-        addTweet () {
+  addTweet () {
 
-        }
+  }
 
-        addDeletion () {
+  addDeletion () {
 
-        }
+  }
 
-        getTweetListSince () {
+  getTweetListSince () {
 
-        }
+  }
 
-        getUnresolvedDeletionList () {
+  getUnresolvedDeletionList () {
 
-        }
+  }
 };
