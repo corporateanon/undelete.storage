@@ -7,4 +7,4 @@ const Attachment = t.struct({
   body: t.String,
 }, 'Attachment');
 
-module.exports = Tweet;
+module.exports = Attachment;
