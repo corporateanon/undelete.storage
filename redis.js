@@ -51,7 +51,7 @@ module.exports = class RedisStorage extends BaseStorage {
   }
 
   shrinkBuffer () {
-    return this.r.zremrangebyrank(BUFFER, BUFFER_MAX_LENGTH, -1);
+    return this.r.zremrangebyrank(BUFFER, 0, -BUFFER_MAX_LENGTH - 1);
   }
 
   isSeen (id) {
@@ -64,7 +64,6 @@ module.exports = class RedisStorage extends BaseStorage {
 
   reportStat (tweetObject) {
     const statKey = this.getStatKey();
-    // var startOfHour = moment().startOf('hour').valueOf();
     var inputSize = JSON.stringify(tweetObject).length;
     this.r.hincrby(statKey.inputSizeHourly, statKey.hour, inputSize);
     this.r.hincrby(statKey.tweetsAddedHourly, statKey.hour, 1);
