@@ -47,7 +47,7 @@ module.exports = class RedisStorage extends BaseStorage {
   }
 
   serializeTweet (tweet) {
-    return JSON.stringify(tweet.body);
+    return JSON.stringify(tweet);
   }
 
   shrinkBuffer () {
