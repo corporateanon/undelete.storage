@@ -5,7 +5,6 @@ const RedisStorage = require('./redis');
 const types = require('./types');
 const conf = require('./conf')();
 
-// Create a server with a host and port
 const server = new Hapi.Server();
 const storage = new RedisStorage();
 
@@ -14,7 +13,7 @@ server.connection({
   port: conf.http.port
 });
 
-// Add the route
+
 server.route({
   method: 'PUT',
   path: '/tweets',
@@ -40,9 +39,34 @@ server.route({
   }
 });
 
-// Start the server
-server.start((err) => {
 
+server.route({
+  method: 'PUT',
+  path: '/deletions',
+  handler: function (request, reply) {
+    storage.addDeletion(request.payload)
+      .then(
+        function () {
+          reply({
+            status: 'OK'
+          });
+        },
+        function (err) {
+          var response = reply({
+            error: `${err}`
+          });
+          if (err && err instanceof types.ValidationError) {
+            response.code(400);
+          } else {
+            response.code(500);
+          }
+        }
+      );
+  }
+});
+
+
+server.start((err) => {
   if (err) {
     throw err;
   }

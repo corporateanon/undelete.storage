@@ -1,41 +1,48 @@
 'use strict';
 // const assert = require('assert');
-// const _ = require('lodash');
+const _ = require('lodash');
 const moment = require('moment');
 const redis = require('promise-redis')();
 const BaseStorage = require('./storage');
-const Tweet = require('./tweet.t');
+const RedisCappedBuffer = require('./redis-capped-buffer');
+const Tweet = require('./tweet-type');
+const Deletion = require('./deletion-type');
 const types = require('./types');
 
-const BUFFER = 'buffer';
-const TWEETID = 'tweet-id-';
 const STAT_INPUT_SIZE_HOURLY = 'stat/input-size/hourly';
 const STAT_TWEETS_ADDED_HOURLY = 'stat/tweets-added/hourly';
-const BUFFER_MAX_LENGTH = 1000;
-const TWEETID_TTL = 3600 * 24 * 2;
 
 module.exports = class RedisStorage extends BaseStorage {
   constructor () {
     super();
     this.r = redis.createClient();
+
+    this.tweetsBuffer = new RedisCappedBuffer({
+      redis   : this.r,
+      key     : 'tweets',
+      capacity: 1000,
+      seenTtl : 3600 * 24 * 2,
+    });
+
+    this.deletionsBuffer = new RedisCappedBuffer({
+      redis   : this.r,
+      key     : 'deletions',
+      capacity: 10000,
+      seenTtl : 3600 * 24 * 2,
+    });
+
   }
 
   addTweet (tweet) {
-    var isSeen = false;
-    var tweetObject;
-
     return Promise.resolve(tweet)
-      .then(tweet => tweetObject = types.cast(Tweet, tweet))
-      .then(() => this.isSeen(tweetObject.id))
-      .then(seen => isSeen = seen)
-      .then(() => !isSeen && this.r.zadd(BUFFER, Date.now(), this.serializeTweet(tweetObject)))
-      .then(() => !isSeen && this.setSeen(tweetObject.id))
-      .then(() => !isSeen && this.reportStat(tweetObject))
-      .then(() => this.shrinkBuffer());
+      .then(tweet => types.cast(Tweet, tweet))
+      .then(tweet => this.tweetsBuffer.add(tweet.id, this.serializeTweet(tweet)));
   }
 
-  addDeletion () {
-
+  addDeletion (deletion) {
+    return Promise.resolve(deletion)
+      .then(deletion => types.cast(Deletion, deletion))
+      .then(deletion => this.deletionsBuffer.add(deletion.id, this.serializeDeletion(deletion)));
   }
 
   getTweetListSince () {
@@ -50,17 +57,12 @@ module.exports = class RedisStorage extends BaseStorage {
     return JSON.stringify(tweet);
   }
 
-  shrinkBuffer () {
-    return this.r.zremrangebyrank(BUFFER, 0, -BUFFER_MAX_LENGTH - 1);
+  serializeDeletion (deletion) {
+    return JSON.stringify(deletion);
   }
 
-  isSeen (id) {
-    return this.r.get(TWEETID + id);
-  }
 
-  setSeen (id) {
-    return this.r.setex(TWEETID + id, TWEETID_TTL, 1);
-  }
+
 
   reportStat (tweetObject) {
     const statKey = this.getStatKey();
@@ -68,6 +70,38 @@ module.exports = class RedisStorage extends BaseStorage {
     this.r.hincrby(statKey.inputSizeHourly, statKey.hour, inputSize);
     this.r.hincrby(statKey.tweetsAddedHourly, statKey.hour, 1);
     console.log('stat:', 'inputSize=', inputSize);
+  }
+
+  getStatInputSize (dateFrom, dateTo) {
+    return this.getStat(STAT_INPUT_SIZE_HOURLY, dateFrom, dateTo);
+  }
+
+  getStatTweetsAdded (dateFrom, dateTo) {
+    return this.getStat(STAT_TWEETS_ADDED_HOURLY, dateFrom, dateTo);
+  }
+
+  normalizeStat (dayKeys, statHashList) {
+    return _(dayKeys).zip(statHashList)
+      .map(it => {
+        const dayStr = it[0];
+        const hourlyStat = it[1] || {};
+        return _(_.range(24))
+          .map(hour => ('0' + hour).slice(-2))
+          .map(hourStr => {
+            const metric = hourlyStat[hourStr] === undefined ? null : parseFloat(hourlyStat[hourStr], 10);
+            return {
+              time: moment(dayStr + ' ' + hourStr, 'YYYY-MM-DD HH').toDate(),
+              metric: metric,
+            };
+          }).value();
+      }).flatten().value();
+  }
+
+  getStat (statKey, dateFrom, dateTo) {
+    const dayKeys = this.dateRangeToDayKeys(dateFrom, dateTo);
+    const inputSizeKeys = dayKeys.map(key => statKey + '/' + key);
+    return Promise.all(inputSizeKeys.map(key => this.r.hgetall(key)))
+      .then(result => this.normalizeStat(dayKeys, result));
   }
 
   getStatKey () {
@@ -80,6 +114,20 @@ module.exports = class RedisStorage extends BaseStorage {
       inputSizeHourly: STAT_INPUT_SIZE_HOURLY + '/' + day,
       tweetsAddedHourly: STAT_TWEETS_ADDED_HOURLY + '/' + day,
     };
+  }
+
+  dateRangeToDayKeys (dateFrom, dateTo) {
+    const momentFrom = moment(dateFrom).startOf('day');
+    const momentTo = moment(dateTo).startOf('day');
+    const diffDays = momentTo.diff(momentFrom, 'days');
+    const dayKeys = [];
+    const momentCurrent = momentFrom.clone();
+    for (var i = 0; i <= diffDays; i++) {
+      dayKeys.push(momentCurrent.format('YYYY-MM-DD'));
+      momentCurrent.add(1, 'days');
+    }
+
+    return dayKeys;
   }
 
 };
