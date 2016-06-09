@@ -1,74 +1,49 @@
 'use strict';
 
-const Hapi = require('hapi');
+const logger = require('koa-logger');
+const koaRouter = require('koa-router');
+const koaBody = require('koa-body')();
+const koa = require('koa');
 const RedisStorage = require('./redis');
-const types = require('./types');
 const conf = require('./conf')();
 
-const server = new Hapi.Server();
-const storage = new RedisStorage();
 
-server.connection({
-  host: '0.0.0.0',
-  port: conf.http.port
-});
+var env = process.env.NODE_ENV || 'development';
+
+module.exports = api;
 
 
-server.route({
-  method: 'PUT',
-  path: '/tweets',
-  handler: function (request, reply) {
-    storage.addTweet(request.payload)
-      .then(
-        function () {
-          reply({
-            status: 'OK'
-          });
-        },
-        function (err) {
-          var response = reply({
-            error: `${err}`
-          });
-          if (err && err instanceof types.ValidationError) {
-            response.code(400);
-          } else {
-            response.code(500);
-          }
-        }
-      );
+function api() {
+
+  const storage = new RedisStorage();
+
+  var app = koa();
+
+  if ('test' != env) {
+    app.use(logger());
   }
-});
+
+  const router = koaRouter();
+
+  app
+    .use(router.routes())
+    .use(router.allowedMethods());
 
 
-server.route({
-  method: 'PUT',
-  path: '/deletions',
-  handler: function (request, reply) {
-    storage.addDeletion(request.payload)
-      .then(
-        function () {
-          reply({
-            status: 'OK'
-          });
-        },
-        function (err) {
-          var response = reply({
-            error: `${err}`
-          });
-          if (err && err instanceof types.ValidationError) {
-            response.code(400);
-          } else {
-            response.code(500);
-          }
-        }
-      );
-  }
-});
+  router.put('/tweets', koaBody, function *(next) {
+    yield storage.addTweet(this.request.body);
+    this.body = JSON.stringify({ status:'ok' });
+    yield next;
+  });
 
 
-server.start((err) => {
-  if (err) {
-    throw err;
-  }
-  console.log('Server running at:', server.info.uri);
-});
+  router.put('/deletions', koaBody, function *(next) {
+    yield storage.addDeletion(this.request.body);
+    this.body = JSON.stringify({ status:'ok' });
+    yield next;
+  });
+
+  return app;
+}
+
+api().listen(conf.http.port);
