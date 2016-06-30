@@ -1,6 +1,7 @@
 'use strict';
 // const assert = require('assert');
 const _ = require('lodash');
+const co = require('co');
 const moment = require('moment');
 const redis = require('promise-redis')();
 const BaseStorage = require('./storage');
@@ -34,9 +35,19 @@ module.exports = class RedisStorage extends BaseStorage {
   }
 
   addTweet (tweet) {
-    return Promise.resolve(tweet)
-      .then(tweet => types.cast(Tweet, tweet))
-      .then(tweet => this.tweetsBuffer.add(tweet.id, this.serializeTweet(tweet)));
+    return co(function* () {
+      tweet = types.fromJSON(Tweet, tweet);
+      const tweetStr = this.serializeTweet(tweet);
+      const lastTime = yield this.tweetsBuffer.add(tweet.id, tweetStr);
+      if (lastTime) {
+        return {
+          messages: [tweetStr],
+          lastTime: lastTime,
+        };
+      } else {
+        return false;
+      }
+    }.bind(this));
   }
 
   addDeletion (deletion) {
@@ -45,8 +56,15 @@ module.exports = class RedisStorage extends BaseStorage {
       .then(deletion => this.deletionsBuffer.add(deletion.id, this.serializeDeletion(deletion)));
   }
 
-  getTweetListSince () {
+  getTweetListSince (since) {
+    return co(function* (){
 
+      const result = yield this.tweetsBuffer.getList({ since: since });
+      return {
+        messages: result[0],
+        lastTime: result[1]
+      };
+    }.bind(this));
   }
 
   getUnresolvedDeletionList () {

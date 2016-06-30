@@ -2,10 +2,11 @@
 
 const t = require('tcomb');
 const Attachment = require('./attachment-type');
+const TwitterTweet = require('./twitter-types').TwitterTweet;
 
 const Tweet = t.struct({
   id: t.String,
-  body: t.Object,
+  body: TwitterTweet,
   attachments: t.maybe(t.list(Attachment)),
 }, 'Tweet');
 

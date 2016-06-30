@@ -57,4 +57,8 @@ ZREMRANGEBYRANK deletions, 0, -DELETIONS_BUFFER_MAX_LENGTH - 1
 
 ### Get recent tweets
 
+```
+ZRANGEBYSCORE buffer, sinceTimestamp, +inf
+```
+
 ### Get recent deletions
