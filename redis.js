@@ -51,9 +51,19 @@ module.exports = class RedisStorage extends BaseStorage {
   }
 
   addDeletion (deletion) {
-    return Promise.resolve(deletion)
-      .then(deletion => types.cast(Deletion, deletion))
-      .then(deletion => this.deletionsBuffer.add(deletion.id, this.serializeDeletion(deletion)));
+    return co(function* () {
+      deletion = types.fromJSON(Deletion, deletion);
+      const deletionStr = this.serializeDeletion(deletion);
+      const lastTime = yield this.deletionsBuffer.add(deletion.id, deletionStr);
+      if (lastTime) {
+        return {
+          messages: [deletionStr],
+          lastTime: lastTime,
+        };
+      } else {
+        return false;
+      }
+    }.bind(this));
   }
 
   getTweetListSince (since) {
@@ -67,8 +77,15 @@ module.exports = class RedisStorage extends BaseStorage {
     }.bind(this));
   }
 
-  getUnresolvedDeletionList () {
+  getDeletionListSince (since) {
+    return co(function* (){
 
+      const result = yield this.deletionsBuffer.getList({ since: since });
+      return {
+        messages: result[0],
+        lastTime: result[1]
+      };
+    }.bind(this));
   }
 
   serializeTweet (tweet) {

@@ -29,9 +29,9 @@ app
 
 
 router.put('/tweets', koaBody, function *(next) {
-  const additionResult = yield storage.addTweet(this.request.body);
-  if(additionResult) {
-    io.emit('messages', additionResult);
+  const insertionResult = yield storage.addTweet(this.request.body);
+  if(insertionResult) {
+    io.emit('tweets', insertionResult);
   }
   this.body = JSON.stringify({ status:'ok' });
   yield next;
@@ -39,7 +39,10 @@ router.put('/tweets', koaBody, function *(next) {
 
 
 router.put('/deletions', koaBody, function *(next) {
-  yield storage.addDeletion(this.request.body);
+  const insertionResult = yield storage.addDeletion(this.request.body);
+  if(insertionResult) {
+    io.emit('deletions', insertionResult);
+  }
   this.body = JSON.stringify({ status:'ok' });
   yield next;
 });
@@ -50,16 +53,20 @@ var io = socketIO(server);
 
 // Socket.io
 io.on('connection', function(socket){
-  console.log('ws connected');
-  // socket.emit('ping', {});
-  socket.on('message', function (data) {
-    console.log('message', data);
-    socket.emit('pong', {message:data});
-  });
-  socket.on('getMessages', co.wrap(function *(data) {
+
+  socket.on('getTweets', co.wrap(function *(data) {
     try {
       const messages = yield storage.getTweetListSince(data.since);
-      socket.emit('messages', messages);
+      socket.emit('tweets', messages);
+    } catch(e) {
+      console.error(e.stack);
+    }
+  }));
+
+  socket.on('getDeletions', co.wrap(function *(data) {
+    try {
+      const messages = yield storage.getDeletionListSince(data.since);
+      socket.emit('deletions', messages);
     } catch(e) {
       console.error(e.stack);
     }
