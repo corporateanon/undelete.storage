@@ -39,7 +39,9 @@ router.put('/tweets', koaBody, function *(next) {
 
 
 router.put('/deletions', koaBody, function *(next) {
-  const insertionResult = yield storage.addDeletion(this.request.body);
+  const deletion = this.request.body;
+  deletion.time = new Date();
+  const insertionResult = yield storage.addDeletion(deletion);
   if(insertionResult) {
     io.emit('deletions', insertionResult);
   }

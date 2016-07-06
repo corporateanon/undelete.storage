@@ -3,7 +3,8 @@
 const t = require('tcomb');
 
 const Deletion = t.struct({
-  id: t.String
+  id: t.String,
+  time: t.Date,
 }, 'Deletion');
 
 module.exports = Deletion;
